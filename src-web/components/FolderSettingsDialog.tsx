@@ -51,12 +51,10 @@ export function FolderSettingsDialog({ folderId, tab }: Props) {
     if (!folder) return [];
 
     const workspace = workspaces.find((w) => w.id === folder.workspaceId);
-    const items = [
+    return [
       workspace?.name,
       ...parentFolders.reverse().map((f) => f.name),
     ].filter(Boolean);
-
-    return items;
   }, [folder, parentFolders, workspaces]);
 
   const tabs = useMemo<TabItem[]>(() => {
