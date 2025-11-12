@@ -96,9 +96,9 @@ export function FolderSettingsDialog({ folderId, tab }: Props) {
         <VStack space={3} className="pb-3 h-full">
           {breadcrumbs.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-text-subtle uppercase tracking-wide">
+              <div className="text-xs font-medium text-text-subtle uppercase tracking-wide">
                 Location
-              </label>
+              </div>
               <div className="flex items-center gap-1.5 text-sm text-text-subtlest px-2 py-1.5 bg-surface rounded border border-border">
                 {breadcrumbs.map((name, index) => (
                   <React.Fragment key={index}>
