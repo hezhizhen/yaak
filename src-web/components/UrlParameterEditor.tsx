@@ -7,9 +7,9 @@ import { VStack } from './core/Stacks';
 
 type Props = {
   forceUpdateKey: string;
-  pairs: HttpRequest['headers'];
+  pairs: HttpRequest['urlParameters'];
   stateKey: PairEditorProps['stateKey'];
-  onChange: (headers: HttpRequest['urlParameters']) => void;
+  onChange: (urlParameters: HttpRequest['urlParameters']) => void;
 };
 
 export function UrlParametersEditor({ pairs, forceUpdateKey, onChange, stateKey }: Props) {

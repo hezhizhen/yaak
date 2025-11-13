@@ -69,6 +69,7 @@ export type Pair = {
   enabled?: boolean;
   name: string;
   value: string;
+  description?: string;
   contentType?: string;
   isFile?: boolean;
   readOnlyName?: boolean;
@@ -493,6 +494,11 @@ export function PairEditorRow({
     [onChange, pair],
   );
 
+  const handleChangeDescription = useMemo(
+    () => (description: string) => onChange?.({ ...pair, description }),
+    [onChange, pair],
+  );
+
   const handleEditMultiLineValue = useCallback(
     () =>
       showDialog({
@@ -547,13 +553,16 @@ export function PairEditorRow({
     [setDraggableRef, setDroppableRef],
   );
 
+  const hasDescription = !isLast && !!pair.description;
+
   return (
     <div
       ref={handleSetRef}
       className={classNames(
         className,
         'group grid grid-cols-[auto_auto_minmax(0,1fr)_auto]',
-        'grid-rows-1 items-center',
+        hasDescription ? 'grid-rows-[auto_auto]' : 'grid-rows-1',
+        'items-start',
         !pair.enabled && 'opacity-60',
       )}
     >
@@ -674,6 +683,36 @@ export function PairEditorRow({
             className="text-text-subtle"
           />
         </Dropdown>
+      )}
+      {hasDescription && (
+        <>
+          {/* Empty cells for checkbox and drag handle columns */}
+          <div className="col-start-1" />
+          <div className="col-start-2" />
+          {/* Description input spanning the name/value area */}
+          <div className="col-start-3 col-span-1">
+            <Input
+              hideLabel
+              stateKey={`description.${pair.id}.${stateKey}`}
+              disabled={disabled}
+              wrapLines={false}
+              readOnly={isDraggingGlobal}
+              size="xs"
+              forcedEnvironmentId={forcedEnvironmentId}
+              forceUpdateKey={forceUpdateKey}
+              containerClassName="bg-surface border-dashed mt-1"
+              defaultValue={pair.description ?? ''}
+              label="Description"
+              name={`description[${index}]`}
+              onChange={handleChangeDescription}
+              placeholder="Description (optional)"
+              autocompleteFunctions={false}
+              autocompleteVariables={false}
+            />
+          </div>
+          {/* Empty cell for dropdown column */}
+          <div className="col-start-4" />
+        </>
       )}
     </div>
   );

@@ -788,6 +788,8 @@ pub struct HttpUrlParameter {
     pub enabled: bool,
     pub name: String,
     pub value: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
     #[ts(optional, as = "Option<String>")]
     pub id: Option<String>,
 }
