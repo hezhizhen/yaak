@@ -37,10 +37,34 @@ impl<'a> DbContext<'a> {
         websocket_request: &WebsocketRequest,
         source: &UpdateSource,
     ) -> Result<WebsocketRequest> {
-        let mut websocket_request = websocket_request.clone();
-        websocket_request.id = "".to_string();
-        websocket_request.sort_priority = websocket_request.sort_priority + 0.001;
-        self.upsert(&websocket_request, source)
+        let mut new_request = websocket_request.clone();
+        new_request.id = "".to_string();
+
+        // Find all siblings (requests in the same folder/workspace)
+        let mut siblings = self.list_websocket_requests(&websocket_request.workspace_id)?;
+        siblings.retain(|r| r.folder_id == websocket_request.folder_id);
+        siblings.sort_by(|a, b| {
+            a.sort_priority.partial_cmp(&b.sort_priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Find the next sibling after the current request
+        let current_index = siblings.iter().position(|r| r.id == websocket_request.id);
+        let next_priority = if let Some(idx) = current_index {
+            if idx + 1 < siblings.len() {
+                // There is a next sibling, place between current and next
+                (websocket_request.sort_priority + siblings[idx + 1].sort_priority) / 2.0
+            } else {
+                // No next sibling, place after current with large gap
+                websocket_request.sort_priority + 1000.0
+            }
+        } else {
+            // Fallback if request not found (shouldn't happen)
+            websocket_request.sort_priority + 0.001
+        };
+
+        new_request.sort_priority = next_priority;
+        self.upsert(&new_request, source)
     }
 
     pub fn upsert_websocket_request(

@@ -37,10 +37,34 @@ impl<'a> DbContext<'a> {
         grpc_request: &GrpcRequest,
         source: &UpdateSource,
     ) -> Result<GrpcRequest> {
-        let mut request = grpc_request.clone();
-        request.id = "".to_string();
-        request.sort_priority = request.sort_priority + 0.001;
-        self.upsert(&request, source)
+        let mut new_request = grpc_request.clone();
+        new_request.id = "".to_string();
+
+        // Find all siblings (requests in the same folder/workspace)
+        let mut siblings = self.list_grpc_requests(&grpc_request.workspace_id)?;
+        siblings.retain(|r| r.folder_id == grpc_request.folder_id);
+        siblings.sort_by(|a, b| {
+            a.sort_priority.partial_cmp(&b.sort_priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Find the next sibling after the current request
+        let current_index = siblings.iter().position(|r| r.id == grpc_request.id);
+        let next_priority = if let Some(idx) = current_index {
+            if idx + 1 < siblings.len() {
+                // There is a next sibling, place between current and next
+                (grpc_request.sort_priority + siblings[idx + 1].sort_priority) / 2.0
+            } else {
+                // No next sibling, place after current with large gap
+                grpc_request.sort_priority + 1000.0
+            }
+        } else {
+            // Fallback if request not found (shouldn't happen)
+            grpc_request.sort_priority + 0.001
+        };
+
+        new_request.sort_priority = next_priority;
+        self.upsert(&new_request, source)
     }
 
     pub fn upsert_grpc_request(
