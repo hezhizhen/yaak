@@ -38,6 +38,91 @@ use yaak_plugins::manager::PluginManager;
 use yaak_plugins::template_callback::PluginTemplateCallback;
 use yaak_templates::{RenderErrorBehavior, RenderOptions};
 
+/// Handle HTTP request with native redirect following
+async fn handle_request_with_redirects(
+    client: reqwest::Client,
+    mut request: reqwest::Request,
+    max_redirects: usize,
+) -> std::result::Result<Response, reqwest::Error> {
+    let mut redirect_count = 0;
+
+    loop {
+        // Execute the request
+        let response = client.execute(request.try_clone().ok_or_else(|| {
+            reqwest::Error::from(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to clone request",
+            ))
+        })?)
+        .await?;
+
+        // Check if this is a redirect
+        let status = response.status();
+        if status.is_redirection() && redirect_count < max_redirects {
+            // Get the Location header
+            let location = match response.headers().get(reqwest::header::LOCATION) {
+                Some(loc) => loc.to_str().ok(),
+                None => None,
+            };
+
+            if let Some(location_str) = location {
+                redirect_count += 1;
+                debug!("Following redirect #{} to: {}", redirect_count, location_str);
+
+                // Parse the redirect URL (may be relative or absolute)
+                let redirect_url = if location_str.starts_with("http://") || location_str.starts_with("https://") {
+                    // Absolute URL
+                    Url::from_str(location_str).ok()
+                } else {
+                    // Relative URL - resolve against the current URL
+                    response.url().join(location_str).ok()
+                };
+
+                if let Some(new_url) = redirect_url {
+                    // Determine the method for the redirect
+                    let new_method = match status.as_u16() {
+                        // 303 See Other: Always use GET
+                        303 => Method::GET,
+                        // 301, 302: Historically changed POST to GET, keep for compatibility
+                        301 | 302 if *request.method() == Method::POST => Method::GET,
+                        // 307, 308: Preserve method
+                        // For others, preserve the original method
+                        _ => request.method().clone(),
+                    };
+
+                    // Build the new request
+                    let mut new_request = reqwest::Request::new(new_method, new_url);
+
+                    // Copy headers from the original request
+                    *new_request.headers_mut() = request.headers().clone();
+
+                    // For methods that changed from POST to GET, remove the body
+                    if *request.method() == Method::POST && *new_request.method() == Method::GET {
+                        // Body is automatically not included for GET requests
+                    } else if let Some(body) = request.body() {
+                        // Try to clone the body for other methods
+                        if let Some(bytes) = body.as_bytes() {
+                            *new_request.body_mut() = Some(bytes.to_vec().into());
+                        }
+                    }
+
+                    request = new_request;
+                    continue;
+                } else {
+                    // Failed to parse redirect URL, return the redirect response
+                    return Ok(response);
+                }
+            } else {
+                // No Location header in redirect response, return as-is
+                return Ok(response);
+            }
+        } else {
+            // Not a redirect or max redirects reached
+            return Ok(response);
+        }
+    }
+}
+
 pub async fn send_http_request<R: Runtime>(
     window: &WebviewWindow<R>,
     unrendered_request: &HttpRequest,
@@ -507,8 +592,17 @@ pub async fn send_http_request_with_context<R: Runtime>(
 
     let start = std::time::Instant::now();
 
+    // Handle redirects natively when follow_redirects is enabled
+    let follow_redirects = workspace.setting_follow_redirects;
+    let client_clone = client.clone();
+
     tokio::spawn(async move {
-        let _ = resp_tx.send(client.execute(sendable_req).await);
+        let result = if follow_redirects {
+            handle_request_with_redirects(client_clone, sendable_req, 10).await
+        } else {
+            client.execute(sendable_req).await
+        };
+        let _ = resp_tx.send(result);
     });
 
     let raw_response = tokio::select! {

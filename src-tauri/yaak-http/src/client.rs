@@ -51,11 +51,8 @@ impl HttpConnectionOptions {
         // Configure DNS resolver
         client = client.dns_resolver(LocalhostResolver::new());
 
-        // Configure redirects
-        client = client.redirect(match self.follow_redirects {
-            true => Policy::limited(10), // TODO: Handle redirects natively
-            false => Policy::none(),
-        });
+        // Configure redirects - always disabled because we handle them natively
+        client = client.redirect(Policy::none());
 
         // Configure cookie provider
         if let Some(p) = &self.cookie_provider {
